@@ -37,8 +37,10 @@ jobs:
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
       - name: Test with pytest
         run: |
-          echo "$GITHUB_WORKSPACE" >> $GITHUB_PATH
-          echo "$GITHUB_WORKSPACE/pcse_gym" >> $GITHUB_PATH
-          echo "PYTHONPATH=$GITHUB_WORKSPACE" >> $GITHUB_PATH
-          echo "PYTHONPATH=$GITHUB_WORKSPACE/pcse_gym" >> $GITHUB_PATH
+          echo "/home/runner/work/PCSE-Gym_dev/PCSE-Gym_dev" >> $GITHUB_PATH
+          echo "/home/runner/work/PCSE-Gym_dev/PCSE-Gym_dev/pcse_gym" >> $GITHUB_PATH
+          echo "PYTHONPATH=/home/runner/work/PCSE-Gym_dev/PCSE-Gym_dev" >> $GITHUB_PATH
+          echo "PYTHONPATH=/home/runner/work/PCSE-Gym_dev/PCSE-Gym_dev/pcse_gym" >> $GITHUB_PATH
+          echo "$GITHUB_PATH"
+          echo "$GITHUB_ENV"
           pytest tests/test* -W ignore::DeprecationWarning
