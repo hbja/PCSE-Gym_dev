@@ -38,6 +38,6 @@ jobs:
       - name: Test with pytest
         run: |
           echo "PYTHONPATH=$GITHUB_WORKSPACE/pcse_gym" >> $GITHUB_PATH
-          echo "$GITHUB_PATH"
-          echo "$GITHUB_ENV"
+          echo $GITHUB_PATH
+          echo $GITHUB_ENV
           pytest tests/test* -W ignore::DeprecationWarning
