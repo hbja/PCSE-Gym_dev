@@ -40,8 +40,9 @@ jobs:
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
       - name: Define path
         run: |
-          echo "PYTHONPATH=$GITHUB_WORKSPACE" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          echo "PYTHONPATH=$GITHUB_WORKSPACE/pcse_gym" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "PYTHONPATH=$GITHUB_WORKSPACE" >> $env:GITHUB_PATH
+          "PYTHONPATH=$GITHUB_WORKSPACE/pcse_gym" >> $env:GITHUB_PATH
+          $PYTHONPATH
       - name: Test with pytest
         run: |
           pytest tests/test* -W ignore::DeprecationWarning
