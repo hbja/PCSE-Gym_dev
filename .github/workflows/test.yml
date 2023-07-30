@@ -42,7 +42,7 @@ jobs:
         run: |
           echo "PYTHONPATH=$GITHUB_WORKSPACE" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           echo "PYTHONPATH=$GITHUB_WORKSPACE/pcse_gym" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          $PYTHONPATH
+          echo $PYTHONPATH
       - name: Test with pytest
         run: |
           pytest tests/test* -W ignore::DeprecationWarning
