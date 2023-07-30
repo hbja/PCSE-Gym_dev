@@ -9,7 +9,7 @@ jobs:
       runs-on: ${{ matrix.os }}
       defaults:
         run:
-          working-directory: ./PCSE-Gym_dev/
+          working-directory: ./
       strategy:
         matrix:
           os: [ubuntu-latest]
