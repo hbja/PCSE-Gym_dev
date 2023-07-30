@@ -7,6 +7,9 @@ on:
 jobs:
     test:
       runs-on: ${{ matrix.os }}
+      defaults:
+        run:
+          working-directory: ./PCSE-Gym_dev/
       strategy:
         matrix:
           os: [ubuntu-latest]
@@ -41,5 +44,4 @@ jobs:
           echo $GITHUB_PATH
       - name: Test with pytest
         run: |
-          echo $GITHUB_PATH
           pytest tests/test* -W ignore::DeprecationWarning
