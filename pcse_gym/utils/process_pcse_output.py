@@ -65,6 +65,7 @@ def compute_growth_storage_organ(pcse_output, timestep, multiplier_amount=1):
     """
     wso_var = "WSO"  # get_name_storage_organ(get_var_names(pcse_output))
     wso_growth = compute_growth_var(pcse_output, timestep, wso_var)
+
     if needs_conversion(wso_var):
         wso_growth = wso_growth * get_conversion_factor(wso_var, multiplier_amount)
     return wso_growth

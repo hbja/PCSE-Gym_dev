@@ -34,3 +34,4 @@ class TestModel(unittest.TestCase):
         self.assertAlmostEqual(summary.loc[[(1992, (48, 0))]]['reward'].values[0], 177.2, 0)
         self.assertAlmostEqual(summary.loc[[(2002, (52, 5.5))]]['WSO'].values[0], 824.3, 0)
         self.assertAlmostEqual(summary.loc[[(2002, (52, 5.5))]]['reward'].values[0], 611.3, 0)
+

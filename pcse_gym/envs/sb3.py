@@ -191,7 +191,6 @@ class StableBaselinesWrapper(common_env.PCSEEnv):
         for i, feature in enumerate(self.crop_features):
             if feature in self.po_features:
                 self.index_feature[feature] = i
-
         cgm_kwargs = kwargs.get('model_config', '')
         if 'Lintul' in cgm_kwargs:
             self.multiplier_amount = 0.1
