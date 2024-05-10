@@ -213,7 +213,7 @@ class StableBaselinesWrapper(common_env.PCSEEnv):
 
     def _apply_action(self, action):
         action = action * self.action_multiplier
-        action = action * 10 * self.multiplier_amount
+        action = action * 10  # * self.multiplier_amount
         return action
 
     def _get_reward(self):
