@@ -94,7 +94,7 @@ def get_policy_kwargs(n_crop_features=len(defaults.get_wofost_default_crop_featu
         features_extractor_kwargs=dict(n_timeseries=n_weather_features,
                                        n_scalars=n_crop_features,
                                        n_timesteps=n_timesteps,
-                                       n_po_features=n_po_features,
+                                       n_po_features=0,
                                        mask_binary=mask_binary),
     )
     return policy_kwargs
@@ -193,8 +193,8 @@ class StableBaselinesWrapper(common_env.PCSEEnv):
                 self.index_feature[feature] = i
 
         cgm_kwargs = kwargs.get('model_config', '')
-        if 'lintul' in cgm_kwargs:
-            self.multiplier_amount = 1
+        if 'Lintul' in cgm_kwargs:
+            self.multiplier_amount = 0.1
             print('Using Lintul!')
         elif 'Wofost' in cgm_kwargs:
             self.multiplier_amount = 1
@@ -209,13 +209,11 @@ class StableBaselinesWrapper(common_env.PCSEEnv):
             nvars = len(self.crop_features)
         else:
             nvars = len(self.crop_features) + len(self.weather_features) * self.timestep
-        if self.mask_binary:
-            nvars = nvars + len(self.po_features)
         return gym.spaces.Box(-10, np.inf, shape=(nvars,))
 
     def _apply_action(self, action):
         action = action * self.action_multiplier
-        action = action * 10  # kg N / ha
+        action = action * 10 * self.multiplier_amount
         return action
 
     def _get_reward(self):
@@ -254,10 +252,6 @@ class StableBaselinesWrapper(common_env.PCSEEnv):
         info = update_info(info, 'action', start_date, action)
         info = update_info(info, 'fertilizer', start_date, amount*10)
         info = update_info(info, 'reward', self.date, reward)
-        if measure is not None:
-            info = update_info(info, 'measure', start_date, measure)
-        if self.random_feature:
-            info = update_info(info, 'random', self.date, observation[len(self.crop_features)-1])
 
         if self.index_feature:
             if 'indexes' not in info.keys():
@@ -285,18 +279,12 @@ class StableBaselinesWrapper(common_env.PCSEEnv):
             observation = observation[0]
 
         for i, feature in enumerate(self.crop_features):
-            if feature == 'random':
-                obs[i] = np.clip(self.rng.normal(10, 10), 0.0, None)
+            if feature in ['SM', 'NH4', 'NO3', 'WC']:
+                obs[i] = observation['crop_model'][feature][-1][0]
             else:
-                if feature in ['SM', 'NH4', 'NO3', 'WC']:
-                    obs[i] = observation['crop_model'][feature][-1][0]
-                else:
-                    obs[i] = observation['crop_model'][feature][-1]
+                obs[i] = observation['crop_model'][feature][-1]
 
         if not self.no_weather:
-            # for i, feature in enumerate(self.action_features):
-            #     j = len(self.crop_features) + i
-            #     obs[j] = observation['actions'][feature]
             for d in range(self.timestep):
                 for i, feature in enumerate(self.weather_features):
                     j = d * len(self.weather_features) + len(self.crop_features) + i

@@ -65,17 +65,17 @@ def initialize_env(pcse_env=1, po_features=[],
                                  reward=reward,
                                  **get_model_kwargs(pcse_env, locations, start_type=kwargs.get('start_type', 'sowing')),
                                  **kwargs, seed=seed)
-    elif framework == 'rllib':
-        from pcse_gym.utils.rllib_helpers import ww_lim, winterwheat_config_maker
-        config = winterwheat_config_maker(crop_features=crop_features,
-                                          costs_nitrogen=costs_nitrogen, years=years,
-                                          locations=locations,
-                                          action_space=action_space,
-                                          action_multiplier=1.0,
-                                          reward=reward, pcse_model=1,
-                                          **get_model_kwargs(1, locations),
-                                          **kwargs)
-        env_return = ww_lim(config)
+    # elif framework == 'rllib':
+    #     from pcse_gym.utils.rllib_helpers import ww_lim, winterwheat_config_maker
+    #     config = winterwheat_config_maker(crop_features=crop_features,
+    #                                       costs_nitrogen=costs_nitrogen, years=years,
+    #                                       locations=locations,
+    #                                       action_space=action_space,
+    #                                       action_multiplier=1.0,
+    #                                       reward=reward, pcse_model=1,
+    #                                       **get_model_kwargs(1, locations),
+    #                                       **kwargs)
+    #     env_return = ww_lim(config)
     else:
         raise Exception("Invalid framework!")
     return env_return

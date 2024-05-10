@@ -7,12 +7,9 @@ import pcse
 import pcse_gym.envs.common_env as common_env
 import pcse_gym.utils.defaults as defaults
 import pcse_gym.utils.process_pcse_output as process_pcse
-from pcse_gym.utils.normalization import NormalizeMeasureObservations, RunningReward, MinMaxReward
-from .constraints import VariableRecoveryRate
-from .measure import MeasureOrNot
 from .sb3 import ZeroNitrogenEnvStorage, StableBaselinesWrapper
 from .rewards import Rewards, ActionsContainer
-from .rewards import reward_functions_with_baseline, reward_functions_end, calculate_nue, get_surplus_n
+from .rewards import reward_functions_with_baseline, reward_functions_end
 
 
 class WinterWheat(gym.Env):
@@ -51,10 +48,6 @@ class WinterWheat(gym.Env):
         self.measure_cost_multiplier = kwargs.get('m_multiplier', 1)
         self.measure_all = kwargs.get('measure_all', False)
         self.random_weather = kwargs.get('random_weather', False)
-        self.list_wav_nav = None
-        self.eval_nh4i = None
-        self.eval_no3i = None
-        self.list_n_i = [self.eval_nh4i, self.eval_no3i]
         self.rng, self.seed = gym.utils.seeding.np_random(seed=seed)
 
         """LINTUL or WOFOST"""
@@ -79,25 +72,6 @@ class WinterWheat(gym.Env):
 
         self._init_reward_function(costs_nitrogen, kwargs)
 
-        """ Use AFA-POMDP measuring paradigm"""
-
-        if self.po_features:
-            self.__measure = MeasureOrNot(self.sb3_env, extend_obs=self.mask_binary,
-                                          placeholder_val=self.placeholder_val,
-                                          cost_multiplier=self.measure_cost_multiplier,
-                                          measure_all_flag=self.measure_all)
-
-        """ In-house normalization"""
-
-        if self.normalize:
-            self.loc_code = kwargs.get('loc_code', None)
-            self._norm = NormalizeMeasureObservations(self.crop_features, self.measure_features.feature_ind,
-                                                      has_random=True if 'random' in self.crop_features else False,
-                                                      no_weather=self.no_weather, loc=self.loc_code,
-                                                      start_type=kwargs.get('start_type', 'sowing'),
-                                                      mask_binary=self.mask_binary, reward_div=600, is_clipped=False)
-            # self._rew_norm = MinMaxReward()
-
         super().reset(seed=seed)
 
     def _init_reward_function(self, costs_nitrogen, kwargs):
@@ -105,37 +79,11 @@ class WinterWheat(gym.Env):
         self.rewards_obj = Rewards(kwargs.get('reward_var'), self.timestep, costs_nitrogen)
         self.reward_container = ActionsContainer()
 
-        if self.reward_function == 'ANE':
-            self.reward_class = self.rewards_obj.DEF(self.timestep, costs_nitrogen)
-            self.reward_container = self.rewards_obj.ContainerANE(self.timestep)
-
-        elif self.reward_function == 'DEF':
+        if self.reward_function == 'DEF':
             self.reward_class = self.rewards_obj.DEF(self.timestep, costs_nitrogen)
 
         elif self.reward_function == 'GRO':
             self.reward_class = self.rewards_obj.GRO(self.timestep, costs_nitrogen)
-
-        elif self.reward_function == 'DEP':
-            self.reward_class = self.rewards_obj.DEP(self.timestep, costs_nitrogen)
-
-        elif self.reward_function in reward_functions_end():
-            self.reward_class = self.rewards_obj.END(self.timestep, costs_nitrogen)
-            self.reward_container = self.rewards_obj.ContainerEND(self.timestep, costs_nitrogen)
-
-        elif self.reward_function == 'NUE':
-            self.reward_class = self.rewards_obj.NUE(self.timestep, costs_nitrogen)
-            self.reward_container = self.rewards_obj.ContainerNUE(self.timestep, costs_nitrogen)
-
-        elif self.reward_function == 'NUP':
-            self.reward_class = self.rewards_obj.NUP(self.timestep, costs_nitrogen)
-
-        elif self.reward_function == 'HAR':
-            self.yield_modifier = 0.2
-            self.reward_class = self.rewards_obj.HAR(self.timestep, costs_nitrogen, 200, 5, 1)
-            self.reward_container = self.rewards_obj.ContainerEND(self.timestep, costs_nitrogen)
-
-        elif self.reward_function == 'DNU':
-            self.reward_class = self.rewards_obj.DNU(self.timestep, costs_nitrogen)
 
         elif self.reward_function == 'FIN':
             self.reward_class = self.rewards_obj.FIN(self.timestep, costs_nitrogen)
@@ -187,35 +135,19 @@ class WinterWheat(gym.Env):
         info['reward'][self.date] = reward
         if 'growth' not in info.keys(): info['growth'] = {}
         info['growth'][self.date] = growth
-
-        # used for reward functions that rely on rewards at terminate
-        if self.pcse_env:
-            reward, info = self.terminate_reward_signal(output, reward, terminated, info)
-
-        # normalize observations and reward if not using VecNormalize wrapper
-        if self.normalize:
-            measure = None
-            if isinstance(action, np.ndarray):
-                measure = action[1:]
-            obs = self.norm.normalize_measure_obs(obs, measure)
-            self.norm.update_running_rew(reward)
-            reward = self.norm.normalize_reward(reward)
+        if 'profit' not in info.keys():
+            info['profit'] = {}
+        info['profit'][self.date] = self.rewards_obj.profit
 
         return obs, reward, terminated, truncated, info
 
     def process_output(self, action, output, obs):
 
         if self.po_features and isinstance(action, np.ndarray) and action.dtype != np.float32:
-            measure = None
             if isinstance(action, np.ndarray):
                 action, measure = action[0], action[1:]
             amount = action * self.action_multiplier
             reward, growth = self.get_reward_and_growth(output, amount)
-            obs, cost = self.measure_features.measure_act(obs, measure)
-            measurement_cost = sum(cost)
-            # if self.reward_function in reward_functions_end() and self.reward_function == 'NUE':
-            #     self.rewards.calc_misc_cost(self.reward_container, measurement_cost)
-            reward -= measurement_cost
             return obs, reward, growth
         else:
             if isinstance(action, np.ndarray):
@@ -244,51 +176,6 @@ class WinterWheat(gym.Env):
                                        multiplier=self.sb3_env.multiplier_amount)
         return reward, growth
 
-    def terminate_reward_signal(self, output, reward, terminated, info):
-        if 'NUE' not in info.keys():
-            info['NUE'] = {}
-        info['NUE'][self.date] = self.rewards_obj.calculate_nue_on_terminate(
-            n_input=self.reward_container.get_total_fertilization * 10,
-            n_so=process_pcse.get_n_storage_organ(output),
-            year=None,  # self.date.year,
-            start=None,  # self.sb3_env.agmt.get_start_date,
-            end=None)  # self.sb3_env.agmt.get_end_date)
-
-        if terminated and self.reward_function in reward_functions_end():
-            reward = self.reward_container.dump_cumulative_positive_reward - abs(reward)
-
-        elif terminated and self.reward_function == 'HAR':
-            reward = self.yield_modifier * self.reward_container.dump_cumulative_positive_reward - abs(reward)
-
-        elif terminated and self.reward_function == 'NUE':
-            reward = (self.reward_container.calculate_reward_nue(
-                n_input=self.reward_container.get_total_fertilization * 10,
-                n_output=process_pcse.get_n_storage_organ(output),
-                year=None,  # self.date.year,
-                start=None,  # self.sb3_env.agmt.get_start_date,
-                end=None, )  # self.sb3_env.agmt.get_end_date)
-                      - abs(self.reward_container.get_total_fertilization * 10))
-            if 'Nsurplus' not in info.keys():
-                info['Nsurplus'] = {}
-            info['Nsurplus'][self.date] = get_surplus_n(self.reward_container.get_total_fertilization,
-                                                        n_so=process_pcse.get_n_storage_organ(output),
-                                                        year=None,  # self.date.year,
-                                                        start=None,  # self.sb3_env.agmt.get_start_date,
-                                                        end=None, )  # self.sb3_env.agmt.get_end_date)
-
-        if 'profit' not in info.keys():
-            info['profit'] = {}
-        info['profit'][self.date] = self.rewards_obj.profit
-
-        # save info of random initial conditions
-        if terminated and self.random_init:
-            if 'init_n' not in info.keys():
-                info['init_n'] = {}
-            info['init_n']['no3'] = self.eval_no3i
-            info['init_n']['nh4'] = self.eval_nh4i
-
-        return reward, info
-
     def overwrite_year(self, year):
         self.years = year
         if self.reward_function in reward_functions_with_baseline():
@@ -308,21 +195,8 @@ class WinterWheat(gym.Env):
         self.locations = location
         self.set_location(location)
 
-    def overwrite_initial_conditions(self, n_layers=None):
-        """ method to overwrite a random N initial condition for every call of reset() """
-        list_nh4i = [np.clip(self.rng.normal(s - r, 10), 0.0, 100.0) for s, r in
-                     zip(self.soil_layers_dis, reversed(range(n_layers)))]
-        list_no3i = [np.clip(self.rng.normal(s - r, 10), 0.0, 100.0) for s, r in
-                     zip(self.soil_layers_dis, reversed(range(n_layers)))]
-        self.eval_nh4i = list_nh4i
-        self.eval_no3i = list_no3i
-        site_parameters = {'NH4I': list_nh4i, 'NO3I': list_no3i}
-        return site_parameters
-
     def reset(self, seed=None, options=None, **kwargs):
         site_params = None
-        if self.random_init:
-            site_params = self.overwrite_initial_conditions(self.len_soil_layers)
 
         if isinstance(self.years, list):
             year = self.np_random.choice(self.years)
@@ -344,17 +218,10 @@ class WinterWheat(gym.Env):
         # TODO: check whether info should/could be filled
         info = {}
 
-        if self.normalize:
-            obs = self.norm.normalize_measure_obs(obs, None)
-
         return obs, info
 
     def render(self, mode="human"):
         pass
-
-    @property
-    def measure_features(self):
-        return self.__measure
 
     @property
     def get_len_soil_layers(self):
@@ -364,17 +231,6 @@ class WinterWheat(gym.Env):
     def model(self):
         return self.sb3_env.model
 
-    @model.setter
-    def model(self, model):
-        self.sb3_env.model = model
-
-    @property
-    def norm(self):
-        return self._norm
-
-    @property
-    def norm_rew(self):
-        return self._rew_norm
 
     @property
     def sb3_env(self):

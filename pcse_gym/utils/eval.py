@@ -23,8 +23,7 @@ from sb3_contrib.common.recurrent.type_aliases import RNNStates
 from sb3_contrib import RecurrentPPO
 import pcse_gym.utils.defaults as defaults
 from pcse_gym.utils.process_pcse_output import get_dict_lintul_wofost
-from pcse_gym.envs.rewards import calculate_nue
-from .plotter import plot_variable, plot_var_vs_freq_scatter, get_ylim_dict
+from .plotter import plot_variable, get_ylim_dict
 
 
 def compute_median(results_dict: dict, filter_list=None):
@@ -126,22 +125,6 @@ def compute_average(results_dict: dict, filter_list=None):
     return sum(filtered_results) / len(filtered_results)
 
 
-def get_action_probs(dis: MultiCategoricalDistribution, po_features, crop_features, measure_all):
-    if po_features:
-        dict = {}
-        dict['prob_action'] = dis.distribution[0].probs.detach().numpy()[0]
-        if measure_all:
-            dict['prob_measure'] = dis.distribution[1].probs.detach().numpy()[0][1]
-        else:
-            for i, feature in enumerate(crop_features):
-                if feature in po_features:
-                    feature = "prob_" + feature
-                    dict[feature] = dis.distribution[i].probs.detach().numpy()[0][1]
-        return dict
-    else:
-        return None
-
-
 def evaluate_policy(
         policy,
         env: Union[gym.Env, VecEnv],
@@ -230,10 +213,6 @@ def evaluate_policy(
                     dis, _ = policy.policy.get_distribution(torch.from_numpy(obs),
                                                             lstm_states=lstm_torch,
                                                             episode_starts=torch.from_numpy(episode_starts))
-
-                    action_probs = get_action_probs(dis, env.envs[0].unwrapped.po_features,
-                                                    env.envs[0].unwrapped.crop_features,
-                                                    env.envs[0].unwrapped.measure_all)
 
                     val = policy.policy.predict_values(torch.from_numpy(obs),
                                                        lstm_states=lstm_torch,
@@ -344,29 +323,6 @@ class FindOptimum():
         return res.x
 
 
-def get_measure_graphs(episode_infos):
-    measure_graph = {}
-    feature_order = episode_infos[0]['indexes'].keys()
-    for date, measurement in episode_infos[0]['measure'].items():
-        for feature, measure in zip(feature_order, measurement):
-            feature = 'measure_' + feature
-            if feature not in measure_graph.keys():
-                measure_graph[feature] = {}
-            if date not in measure_graph[feature].keys():
-                measure_graph[feature][date] = measure
-    episode_infos[0] = episode_infos[0] | measure_graph  # Python 3.9.0
-    return episode_infos
-
-
-def get_measure_graph(episode_infos):
-    measure_graph = {}
-    for date, measurement in episode_infos[0]['measure'].items():
-        measurement = measurement[0]
-        measure_graph[date] = measurement
-    episode_infos[0]['measure'] = measure_graph
-    return episode_infos
-
-
 class EvalCallback(BaseCallback):
     """
     Callback for evaluating an agent. Writes the following to tensorboard:
@@ -431,21 +387,6 @@ class EvalCallback(BaseCallback):
             log_training = True
         return log_training
 
-    def replace_measure_variable(self, variables, cumulative=None):
-        variables.remove('measure')
-        for variable in self.env_eval.po_features:
-            variable = 'measure_' + variable
-            variables += [variable]
-            if cumulative:
-                cumulative += [variable]
-        return (variables, cumulative) if cumulative else variables
-
-    def get_nue(self, episode_infos):
-        n_so = list(episode_infos[0]['NamountSO'].values())[-1]
-        n_in = np.cumsum(list(episode_infos[0]['fertilizer'].values()))[-1]
-        n_year = list(episode_infos[0]['NamountSO'].keys())[-1].year
-        return calculate_nue(n_input=n_in, n_so=n_so, year=n_year)
-
     def _on_step(self):
         train_year = self.model.get_env().get_attr("date")[0].year
         self.histogram_training_years[train_year] = self.histogram_training_years[train_year] + 1
@@ -472,20 +413,10 @@ class EvalCallback(BaseCallback):
             if self.pcse_model:
                 variables = ['action', 'WSO', 'reward', 'IDWST',
                              'NLOSSCUM']
-                if self.po_features: variables.append('measure')
                 cumulative = ['action', 'reward']
             else:
                 variables = ['action', 'WSO', 'reward']
-                if self.po_features: variables.append('measure')
                 cumulative = ['action', 'reward']
-
-            '''logic for measure graph'''
-            if 'measure' in variables:
-                if not self.env_eval.envs[0].unwrapped.measure_all:
-                    variables, cumulative = self.replace_measure_variable(variables, cumulative)
-                    episode_infos = get_measure_graphs(episode_infos)
-                else:
-                    episode_infos = get_measure_graph(episode_infos)
 
             for i, variable in enumerate(variables):
                 n_timepoints = len(episode_infos[0][variable])
@@ -517,16 +448,10 @@ class EvalCallback(BaseCallback):
             ax.set_xticklabels(list(self.histogram_training_locations.keys()), fontdict=None, minor=False)
             self.logger.record(f'figures/training-locations', Figure(fig, close=True))
 
-            reward, fertilizer, result_model, WSO, NUE, profit, init_no3, init_nh4 = {}, {}, {}, {}, {}, {}, {}, {}
+            reward, fertilizer, result_model, WSO, profit, init_no3, init_nh4 = {}, {}, {}, {}, {}, {}, {}
             log_training = self.get_do_log_training()
 
             env_pcse_evaluation = self.env_eval
-            # if env_pcse_evaluation.normalize:
-            #     env_pcse_evaluation = DummyVecEnv([lambda: env_pcse_evaluation])
-            # else:
-            #     env_pcse_evaluation = VecNormalize(DummyVecEnv([lambda: env_pcse_evaluation]),
-            #                                        norm_obs=True, norm_reward=True,
-            #                                        clip_obs=10., clip_reward=50., gamma=1)
             env_pcse_evaluation.training = False
             n_year_loc = 0
 
@@ -540,23 +465,15 @@ class EvalCallback(BaseCallback):
                     env_pcse_evaluation.env_method('overwrite_year', year)
                     env_pcse_evaluation.env_method('overwrite_location', test_location)
                     env_pcse_evaluation.reset()
-                    if not self.env_eval.envs[0].unwrapped.normalize:
-                        sync_envs_normalization(self.model.get_env(), env_pcse_evaluation)
                     episode_rewards, episode_infos = evaluate_policy(policy=self.model, env=env_pcse_evaluation)
                     my_key = (year, test_location)
                     reward[my_key] = episode_rewards[0].item()
                     # years_bar.set_description(f'Reward {year}, {str(test_location): <{12}}: {reward[my_key]}')
-                    if self.po_features:
-                        episode_infos = get_measure_graphs(episode_infos)
                     fertilizer[my_key] = sum(episode_infos[0]['fertilizer'].values())
                     WSO[my_key] = list(episode_infos[0]['WSO'].values())[-1]
                     profit[my_key] = list(episode_infos[0]['profit'].values())[-1]
-                    NUE[my_key] = self.get_nue(episode_infos)
-                    # if self.env_eval.envs[0].unwrapped.random_init:
-                        # init_no3[my_key] = episode_infos[0]['init_n']['no3']
-                        # init_nh4[my_key] = episode_infos[0]['init_n']['nh4']
-                    # self.logger.record(f'eval/reward-{my_key}', reward[my_key])
-                    # self.logger.record(f'eval/nitrogen-{my_key}', fertilizer[my_key])
+                    self.logger.record(f'eval/reward-{my_key}', reward[my_key])
+                    self.logger.record(f'eval/nitrogen-{my_key}', fertilizer[my_key])
                     result_model[my_key] = episode_infos
                     n_year_loc = 0 if log_training else n_year_loc + 1
                 avg_rew = mean([x for x in reward.values()])
@@ -564,8 +481,6 @@ class EvalCallback(BaseCallback):
 
             for test_location in list(set(self.test_locations)):
                 test_keys = [(a, test_location) for a in self.test_years]
-                self.logger.record(f'eval/NUE-average-test-{test_location}', compute_average(NUE, test_keys))
-                self.logger.record(f'eval/NUE-median-test-{test_location}', compute_median(NUE, test_keys))
                 self.logger.record(f'eval/reward-average-test-{test_location}', compute_average(reward, test_keys))
                 self.logger.record(f'eval/nitrogen-average-test-{test_location}',
                                    compute_average(fertilizer, test_keys))
@@ -581,15 +496,11 @@ class EvalCallback(BaseCallback):
                 train_keys = [(a, b) for a in self.train_years for b in self.train_locations]
                 self.logger.record(f'eval/reward-average-train', compute_average(reward, train_keys))
                 self.logger.record(f'eval/nitrogen-average-train', compute_average(fertilizer, train_keys))
-                self.logger.record(f'eval/NUE-average-train', compute_average(NUE, train_keys))
-                self.logger.record(f'eval/NUE-median-train', compute_median(NUE, train_keys))
                 self.logger.record(f'eval/profit-average-train', compute_average(profit, train_keys))
                 self.logger.record(f'eval/reward-median-train', compute_median(reward, train_keys))
                 self.logger.record(f'eval/nitrogen-median-train', compute_median(fertilizer, train_keys))
                 self.logger.record(f'eval/profit-median-train', compute_median(profit, train_keys))
 
-            self.logger.record(f'eval/NUE-median-all', compute_median(NUE))
-            self.logger.record(f'eval/NUE-average-all', compute_average(NUE))
             self.logger.record(f'eval/reward-average-all', compute_average(reward))
             self.logger.record(f'eval/nitrogen-average-all', compute_average(fertilizer))
             self.logger.record(f'eval/WSO-average-all', compute_average(WSO))
@@ -601,25 +512,13 @@ class EvalCallback(BaseCallback):
 
             if self.pcse_model:
                 variables = ['DVS', 'action', 'WSO', 'reward',
-                             'fertilizer', 'val', 'IDWST', 'prob_measure',
+                             'fertilizer', 'val', 'IDWST',
                              'NLOSSCUM', 'WC', 'Ndemand', 'NAVAIL', 'NuptakeTotal',
                              'SM', 'TAGP', 'LAI']
-                if self.env_eval.envs[0].unwrapped.reward_function not in ['NUE', 'HAR', 'END', 'ENY']:
-                    variables = variables.remove('reward')
-                if self.po_features:
-                    variables.append('measure')
                     # for p in self.po_features:
                     #     variables.append(p)
-                if self.env_eval.envs[0].unwrapped.reward_function == 'ANE': variables.append('moving_ANE')
             else:
                 variables = ['action', 'WSO', 'reward', 'TNSOIL', 'val']
-                if self.po_features: variables.append('measure')
-
-            if 'measure' in variables and not self.env_eval.envs[0].unwrapped.measure_all:
-                variables = self.replace_measure_variable(variables)
-                for variable in self.env_eval.envs[0].unwrapped.po_features:  # TODO make tidier
-                    variable = 'prob_' + variable
-                    variables += [variable]
 
             keys_figure = [(a, b) for a in self.test_years for b in self.test_locations]
             results_figure = {filter_key: result_model[filter_key] for filter_key in keys_figure}
@@ -645,17 +544,14 @@ class EvalCallback(BaseCallback):
                 plot_individual = False
                 if plot_individual:
                     fig, ax = plt.subplots()
-                    plot_variable(results_figure, variable=variable, ax=ax, ylim=get_ylim_dict(n_year_loc)[variable])
+                    plot_variable(results_figure, variable=variable, ax=ax, ylim=get_ylim_dict(n_year_loc, wso=self.env_eval.envs[0].unwrapped.pcse_env)[variable])
                     self.logger.record(f'figures/{variable}', Figure(fig, close=True))
                     plt.close()
 
                 fig, ax = plt.subplots()
                 plot_variable(results_figure, variable=variable, ax=ax, ylim=get_ylim_dict(n_year_loc)[variable],
                               plot_average=True)
-                if variable.startswith('measure'):
-                    self.logger.record(f'figures/sum-{variable}', Figure(fig, close=True))
-                else:
-                    self.logger.record(f'figures/med-{variable}', Figure(fig, close=True))
+                self.logger.record(f'figures/med-{variable}', Figure(fig, close=True))
                 plt.close()
 
             self.logger.dump(step=self.num_timesteps)
