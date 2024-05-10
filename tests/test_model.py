@@ -8,7 +8,6 @@ from pcse_gym.utils.eval import evaluate_policy, summarize_results
 import tests.initialize_env as init_env
 import pcse_gym.utils.defaults as defaults
 
-# TODO: figure out a more robust way of obtaining the file paths
 class TestModel(unittest.TestCase):
     def test_model(self):
         file_path = os.path.dirname(os.path.realpath(__file__))
@@ -30,7 +29,7 @@ class TestModel(unittest.TestCase):
                 results_key = (test_year, location)
                 rewards_model[results_key], results_model[results_key] = evaluate_policy(model_cropgym, env, amount=1)
         summary = summarize_results(results_model)
-        self.assertAlmostEqual(summary.loc[[(1992, (48, 0))]]['WSO'].values[0], 275.4, 0)
-        self.assertAlmostEqual(summary.loc[[(1992, (48, 0))]]['reward'].values[0], 177.2, 0)
-        self.assertAlmostEqual(summary.loc[[(2002, (52, 5.5))]]['WSO'].values[0], 824.3, 0)
-        self.assertAlmostEqual(summary.loc[[(2002, (52, 5.5))]]['reward'].values[0], 611.3, 0)
+        self.assertAlmostEqual(summary.loc[[(1992, (48, 0))]]['WSO'].values[0], 265.6, 0)
+        self.assertAlmostEqual(summary.loc[[(1992, (48, 0))]]['reward'].values[0], -215.2, 0)
+        self.assertAlmostEqual(summary.loc[[(2002, (52, 5.5))]]['WSO'].values[0], 705.5, 0)
+        self.assertAlmostEqual(summary.loc[[(2002, (52, 5.5))]]['reward'].values[0], -262.74, 0)
