@@ -28,6 +28,14 @@ def get_default_crop_features(pcse_env=0, minimal=True):
     return crop_features
 
 
+def get_default_crop_features(pcse_env=1):
+    if pcse_env:
+        crop_features = get_wofost_default_crop_features()
+    else:
+        crop_features = get_lintul_default_crop_features()
+    return crop_features
+
+
 def get_default_weather_features():
     # See get_titles() for description of variables
     return ["IRRAD", "TMIN", "RAIN"]
