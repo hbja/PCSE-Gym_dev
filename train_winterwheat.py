@@ -1,3 +1,8 @@
+
+from stable_baselines3 import PPO, DQN
+from stable_baselines3.common.vec_env import VecNormalize, DummyVecEnv
+from stable_baselines3.common.monitor import Monitor
+from sb3_contrib import RecurrentPPO
 import argparse
 
 import comet_ml
@@ -348,8 +353,9 @@ if __name__ == '__main__':
           test_locations=test_locations,
           n_steps=args.nsteps, seed=args.seed,
           tag=tag, costs_nitrogen=args.costs_nitrogen,
-          crop_features=crop_features,
-          weather_features=weather_features,
-          action_features=action_features, action_space=action_spaces,
+          crop_features=defaults.get_default_crop_features(pcse_env=args.environment),
+          weather_features=defaults.get_default_weather_features(),
+          action_features=defaults.get_default_action_features(),
+          action_space=defaults.get_default_action_space(),
           pcse_model=args.environment, agent=args.agent,
           reward=args.reward, multiprocess=args.multiproc, **kwargs)
