@@ -18,6 +18,7 @@ def get_wofost_default_po_features():
     return ["TAGP", "LAI", "NAVAIL", "NuptakeTotal", "SM"]
 
 
+
 def get_default_crop_features(pcse_env=0, minimal=True):
     if pcse_env and minimal:
         crop_features = get_wofost_minimal_crop_features()
