@@ -84,14 +84,6 @@ class Rewards:
 
         return reward, growth
 
-    def nue_reward(self, nue_obj, output, output_baseline, amount, multiplier=1):
-        nue_obj.calculate_cost_cumulative(amount)
-        nue_obj.calculate_positive_reward_cumulative(output, output_baseline, multiplier)
-        reward = 0 - amount * self.costs_nitrogen
-        growth = process_pcse.compute_growth_storage_organ(output, self.timestep, multiplier)
-
-        return reward, growth
-
     def calc_misc_cost(self, end_obj, cost):
         end_obj.calculate_misc_cumulative_cost(cost)
 
@@ -116,9 +108,6 @@ class Rewards:
 
     def update_profit(self, output, amount, year, multiplier, country='NL'):
         self.profit += self.calculate_profit(output, amount, year, multiplier, with_year=self.with_year)
-
-    def calculate_nue_on_terminate(self, n_input, n_so, year, start=None, end=None, country='NL'):
-        return calculate_nue(n_input, n_so, year=year, start=start, end=end)
 
     """
     Classes that determine the reward function
